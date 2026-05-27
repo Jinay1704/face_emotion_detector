@@ -1,0 +1,9 @@
+tensorflow
+numpy
+Pillow
+requests
+Pillow
+mediapipe
+opencv-python-headless
+pandas
+plotly
