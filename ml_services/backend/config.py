@@ -3,11 +3,16 @@ backend/config.py
 Central config for Face Emotion Detection project.
 """
 import os
+from huggingface_hub import hf_hub_download
 
 # Paths
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODELS_DIR   = os.path.join(PROJECT_ROOT, "models")
-MODEL_PATH   = os.path.join(MODELS_DIR, "efficientnet_full_model.keras")
+
+MODEL_PATH = hf_hub_download(
+    repo_id="Jinay1704/emotion-model",
+    filename="efficientnet_full_model.keras"
+)
 
 # Classes — exactly as in your Colab CONFIGURATION dict
 CLASS_NAMES = ["angry", "happy", "sad"]

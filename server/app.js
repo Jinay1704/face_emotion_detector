@@ -17,8 +17,16 @@ app.use(
 
 // ── CORS ───────────────────────────────────────────────────────
 app.use(cors({
-  origin:      process.env.CLIENT_URL || "http://localhost:5173",
+  origin: [
+    "http://localhost:5173",
+    "https://face-emotion-detector-yqay.onrender.com"
+  ],
   credentials: true,
+  methods: ["GET","POST","PUT","DELETE","OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization"
+  ]
 }));
 
 // ── Rate limiting ──────────────────────────────────────────────
