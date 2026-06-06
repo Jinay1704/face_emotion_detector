@@ -7,25 +7,10 @@ A full-stack AI-powered web application that detects human emotions (Angry, Happ
 ![TensorFlow](https://img.shields.io/badge/TensorFlow-2.x-orange?style=flat-square&logo=tensorflow)
 ![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react)
 ![Node.js](https://img.shields.io/badge/Node.js-20-green?style=flat-square&logo=nodedotjs)
-![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?style=flat-square&logo=docker)
+
 
 ---
 
-## 📋 Table of Contents
-
-- [Overview](#overview)
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Getting Started](#getting-started)
-- [Environment Variables](#environment-variables)
-- [Running with Docker](#running-with-docker)
-- [API Reference](#api-reference)
-- [Subscription Plans](#subscription-plans)
-- [Screenshots](#screenshots)
-- [Deployment](#deployment)
-
----
 
 ## 🎯 Overview
 
