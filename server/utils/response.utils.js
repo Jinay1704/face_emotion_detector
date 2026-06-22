@@ -2,7 +2,6 @@
  * Standard API response helpers.
  * Every endpoint uses these so the client always gets a consistent shape.
  */
-
 const sendSuccess = (res, statusCode, message, data) => {
   return res.status(statusCode).json({
     success: true,
@@ -10,7 +9,6 @@ const sendSuccess = (res, statusCode, message, data) => {
     data:    data || null,
   });
 };
-
 const sendError = (res, statusCode, message, errors) => {
   return res.status(statusCode).json({
     success: false,

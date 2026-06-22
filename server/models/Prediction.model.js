@@ -45,7 +45,5 @@ const PredictionSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-
 PredictionSchema.index({ clerkId: 1, createdAt: -1 });
-
 module.exports = mongoose.model("Prediction", PredictionSchema);

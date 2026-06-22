@@ -6,7 +6,7 @@ import Loader from "../common/Loader";
 
 export default function VideoUploader({ onSubmit, loading, uploadPct, disabled }) {
   const [file,      setFile]      = useState(null);
-  const [frameSkip, setFrameSkip] = useState(6);
+  const [frameSkip, setFrameSkip] = useState(10);
   const [maxFrames, setMaxFrames] = useState(150);
   const [saveVideo, setSaveVideo] = useState(true);
 

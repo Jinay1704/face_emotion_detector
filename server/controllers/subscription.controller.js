@@ -51,8 +51,11 @@ const getMySubscription = async (req, res) => {
   }
 };
 
-// POST /api/subscription/upgrade
-// Directly updates plan — no payment redirect (Clerk billing checkout URL not publicly documented)
+/**
+ * POST /api/subscription/upgrade
+ * Called ONLY after Clerk billing confirms payment via webhook.
+ * This is also used as fallback for manual plan updates.
+ */
 const upgradePlan = async (req, res) => {
   try {
     const { plan } = req.body;
@@ -65,10 +68,12 @@ const upgradePlan = async (req, res) => {
       return sendError(res, 400, "Already on " + plan + " plan");
     }
 
+    // Update Clerk publicMetadata
     await clerkClient.users.updateUser(user.clerkId, {
       publicMetadata: { plan, planUpdatedAt: new Date().toISOString() },
     });
 
+    // Update MongoDB directly
     user.plan = plan;
     await user.save();
 
@@ -76,7 +81,7 @@ const upgradePlan = async (req, res) => {
 
     return sendSuccess(res, 200, "Plan upgraded to " + plan, {
       plan,
-      limits: PLAN_LIMITS[plan] || PLAN_LIMITS.free,
+      limits:          PLAN_LIMITS[plan] || PLAN_LIMITS.free,
       requiresPayment: false,
     });
   } catch (err) {

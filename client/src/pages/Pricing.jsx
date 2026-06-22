@@ -32,7 +32,6 @@ export default function Pricing() {
   const [currentPlan, setCurrentPlan] = useState("free");
   const [downgrading, setDowngrading] = useState(false);
 
-  // Fetch current plan directly
   useEffect(() => {
     if (!isSignedIn) return;
     (async () => {
@@ -46,13 +45,13 @@ export default function Pricing() {
     })();
   }, [isSignedIn]);
 
-  // Upgrade → go to checkout page
+  // Upgrade → go to Clerk checkout page
   const handleUpgrade = (planId) => {
     if (!isSignedIn) { navigate("/sign-in"); return; }
     navigate("/checkout?plan=" + planId);
   };
 
-  // Downgrade → direct API call
+  // Downgrade → direct API call (no payment needed)
   const handleDowngrade = async () => {
     setDowngrading(true);
     try {
@@ -72,7 +71,6 @@ export default function Pricing() {
   return (
     <div className="section py-16 space-y-14">
 
-      {/* Header */}
       <div className="text-center max-w-2xl mx-auto">
         <h1 className="text-4xl font-extrabold text-white mb-4">Simple, transparent pricing</h1>
         <p className="text-gray-400 text-lg">Upgrade or downgrade anytime — your plan updates instantly.</p>
@@ -84,7 +82,6 @@ export default function Pricing() {
         )}
       </div>
 
-      {/* Plan cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-5xl mx-auto">
         {PLANS.map((plan) => {
           const isCurrent = currentPlan === plan.id;
@@ -100,7 +97,6 @@ export default function Pricing() {
                 ? "border-green-600/50 bg-green-950/10"
                 : "border-gray-800 bg-gray-900 hover:border-gray-600")
             }>
-              {/* Badges */}
               {plan.popular && !isCurrent && (
                 <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
                   <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-indigo-600 text-white text-xs font-semibold shadow">
@@ -116,7 +112,6 @@ export default function Pricing() {
                 </div>
               )}
 
-              {/* Plan info */}
               <div className="mb-6">
                 <h3 className="text-xl font-bold text-white mb-1">{plan.name}</h3>
                 <p className="text-sm text-gray-400 mb-4">{plan.description}</p>
@@ -126,7 +121,6 @@ export default function Pricing() {
                 </div>
               </div>
 
-              {/* Features */}
               <ul className="space-y-3 flex-1 mb-8">
                 {plan.features.map((f) => (
                   <li key={f} className="flex items-start gap-2.5">
@@ -136,7 +130,6 @@ export default function Pricing() {
                 ))}
               </ul>
 
-              {/* CTA */}
               {!isSignedIn ? (
                 <Link to="/sign-up" className={"btn w-full " + (plan.popular ? "btn-primary" : "btn-secondary")}>
                   Get started free
@@ -175,15 +168,14 @@ export default function Pricing() {
         })}
       </div>
 
-      {/* FAQ */}
       <div className="max-w-2xl mx-auto space-y-6">
         <h2 className="text-2xl font-bold text-white text-center">Common questions</h2>
         <div className="space-y-4">
           {[
-            { q: "When does my plan change?",     a: "Instantly after checkout is complete." },
+            { q: "When does my plan change?",     a: "Instantly after payment is confirmed by Clerk." },
             { q: "Can I downgrade back to Free?", a: "Yes, at any time. Your history is always preserved." },
             { q: "Does Free plan expire?",         a: "Never. Free plan is permanent with 10 predictions every month." },
-            { q: "Is payment secure?",             a: "Yes — payments are processed securely. Your card details are encrypted." },
+            { q: "Is payment secure?",             a: "Yes — payments are processed by Clerk × Stripe with 256-bit SSL encryption." },
           ].map((item) => (
             <div key={item.q} className="card">
               <p className="text-white font-semibold mb-2">{item.q}</p>
