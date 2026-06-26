@@ -29,111 +29,97 @@ const handleClerkWebhook = async (req, res) => {
   }
 
   const { type, data } = event;
-  console.log("Clerk webhook →", type);
+  console.log("✅ Clerk webhook received:", type);
 
   try {
     switch (type) {
 
-      // ── User created ───────────────────────────────────────
       case "user.created": {
         const email = getPrimaryEmail(data);
         const name  = getFullName(data) || email.split("@")[0];
         const plan  = data.public_metadata?.plan || "free";
         await User.create({
-          clerkId: data.id,
-          email,
-          name,
-          avatar: data.image_url || "",
-          plan,
+          clerkId: data.id, email, name,
+          avatar: data.image_url || "", plan,
         });
         console.log("✅ User created:", email);
         break;
       }
 
-      // ── User updated ───────────────────────────────────────
       case "user.updated": {
-        const email = getPrimaryEmail(data);
-        const name  = getFullName(data);
-        const plan  = data.public_metadata?.plan;
+        const email  = getPrimaryEmail(data);
+        const name   = getFullName(data);
+        const plan   = data.public_metadata?.plan;
         const update = { email, avatar: data.image_url || "" };
         if (name) update.name = name;
         if (plan) update.plan = plan;
         await User.findOneAndUpdate({ clerkId: data.id }, update, { new: true });
-        console.log("✅ User updated:", email, plan ? "→ plan: " + plan : "");
+        console.log("✅ User updated:", email);
         break;
       }
 
-      // ── Subscription created or updated ───────────────────
+      // ── Handle ALL subscription event name variants ────────
       case "subscription.created":
       case "subscription.updated":
       case "user.subscription.created":
       case "user.subscription.updated": {
-        console.log("💳 Subscription event:", type);
-
-        // ── Get the user ID from payer ─────────────────────
         const clerkId = data.payer?.user_id
                      || data.user_id
                      || data.userId;
 
         if (!clerkId) {
-          console.warn("⚠️ No clerkId found in subscription event");
+          console.warn("⚠️ No clerkId in subscription event");
           break;
         }
 
-        // ── Find active plan from items array ──────────────
-        // Items array contains all subscription items
-        // Status priority: active > upcoming > (ignore abandoned/canceled/ended)
         const items = data.items || [];
+        console.log("Items count:", items.length);
+        console.log("Items:", items.map(i => `${i.plan?.slug}(${i.status})`).join(", "));
 
-        console.log("All items:", items.map(i => ({
-          plan: i.plan?.slug,
-          status: i.status,
-          amount: i.plan?.amount
-        })));
+        // ── Find the correct plan using smart priority ─────
+        // Order of priority (most specific first):
+        const PRIORITY = ["active", "upcoming", "ended", "canceled", "abandoned"];
 
-        // Find the best active plan
-        // Priority: active paid > upcoming paid > active free > upcoming free
-        let activePlanSlug = null;
+        let bestPlanSlug = null;
+        let bestPlanAmount = -1;
 
-        // First try: find active paid plan
-        const activePaid = items.find(
-          i => i.status === "active" && i.plan?.amount > 0
-        );
-        if (activePaid) {
-          activePlanSlug = activePaid.plan.slug;
-          console.log("Found active paid plan:", activePlanSlug);
+        // From all non-abandoned items, pick the highest paid plan
+        // that is active or upcoming
+        for (const status of ["active", "upcoming"]) {
+          const candidates = items.filter(i => i.status === status);
+          for (const item of candidates) {
+            const amount = item.plan?.amount ?? 0;
+            const slug   = item.plan?.slug;
+            if (slug && amount >= bestPlanAmount) {
+              bestPlanAmount = amount;
+              bestPlanSlug   = slug;
+            }
+          }
+          if (bestPlanSlug && bestPlanAmount > 0) break; // found paid plan
         }
 
-        // Second try: find upcoming paid plan (switching to)
-        if (!activePlanSlug) {
-          const upcomingPaid = items.find(
-            i => i.status === "upcoming" && i.plan?.amount > 0
+        // If no active/upcoming paid plan found, check if subscription
+        // overall is active (just renewed or switched)
+        if (!bestPlanSlug || bestPlanAmount === 0) {
+          // Sort items by created_at descending → newest first
+          const sortedItems = [...items].sort(
+            (a, b) => (b.created_at || 0) - (a.created_at || 0)
           );
-          if (upcomingPaid) {
-            activePlanSlug = upcomingPaid.plan.slug;
-            console.log("Found upcoming paid plan:", activePlanSlug);
+          // Take the newest non-abandoned, non-canceled item
+          const newest = sortedItems.find(
+            i => !["abandoned", "canceled"].includes(i.status)
+          );
+          if (newest) {
+            bestPlanSlug   = newest.plan?.slug;
+            bestPlanAmount = newest.plan?.amount ?? 0;
           }
         }
 
-        // Third try: find active free plan (downgraded)
-        if (!activePlanSlug) {
-          const activeFree = items.find(
-            i => (i.status === "active" || i.status === "upcoming") && i.plan?.amount === 0
-          );
-          if (activeFree) {
-            activePlanSlug = activeFree.plan.slug || "free";
-            console.log("Found active/upcoming free plan:", activePlanSlug);
-          }
-        }
+        // Final fallback
+        if (!bestPlanSlug) bestPlanSlug = "free";
 
-        // Default to free if nothing found
-        if (!activePlanSlug) {
-          activePlanSlug = "free";
-          console.log("No active plan found, defaulting to free");
-        }
-
-        const plan = mapClerkPlanToPlan(activePlanSlug);
-        console.log("Mapped plan slug:", activePlanSlug, "→", plan);
+        const plan = mapClerkPlanToPlan(bestPlanSlug);
+        console.log("Resolved plan slug:", bestPlanSlug, "→ plan:", plan);
 
         const user = await User.findOneAndUpdate(
           { clerkId },
@@ -142,29 +128,25 @@ const handleClerkWebhook = async (req, res) => {
         );
 
         if (user) {
-          console.log("✅ Plan updated:", user.email, "→", plan);
+          console.log("✅ Plan updated in DB:", user.email, "→", plan);
         } else {
-          console.warn("⚠️ User not found in MongoDB for clerkId:", clerkId);
+          console.warn("⚠️ User not found for clerkId:", clerkId);
         }
         break;
       }
 
-      // ── Subscription deleted ───────────────────────────────
       case "subscription.deleted":
       case "user.subscription.deleted": {
         const clerkId = data.payer?.user_id || data.user_id || data.userId;
         if (clerkId) {
           const user = await User.findOneAndUpdate(
-            { clerkId },
-            { plan: "free" },
-            { new: true }
+            { clerkId }, { plan: "free" }, { new: true }
           );
-          console.log("✅ Subscription deleted → free | User:", user?.email);
+          console.log("✅ Subscription deleted → free:", user?.email);
         }
         break;
       }
 
-      // ── User deleted ───────────────────────────────────────
       case "user.deleted": {
         const user = await User.findOne({ clerkId: data.id });
         if (user) {
@@ -184,11 +166,11 @@ const handleClerkWebhook = async (req, res) => {
       }
 
       default:
-        console.log("ℹ️ Unhandled Clerk event:", type);
+        console.log("ℹ️ Unhandled event:", type);
     }
   } catch (err) {
-    console.error("❌ Webhook error:", err);
-    return res.status(500).json({ error: "Webhook processing failed" });
+    console.error("❌ Webhook processing error:", err);
+    return res.status(500).json({ error: "Webhook processing failed: " + err.message });
   }
 
   return res.json({ received: true, type });

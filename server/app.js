@@ -33,11 +33,12 @@ app.use(cors({
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 200, standardHeaders: true }));
 
 // ── Logging ────────────────────────────────────────────────────
-if (process.env.NODE_ENV === "development") app.use(morgan("dev"));
+app.use(morgan("dev")); // always log so Render logs show requests
 
-// ── Raw body routes MUST come BEFORE clerkMiddleware ──────────
-// svix verifies the HMAC over the raw bytes; clerkMiddleware()
-// can consume/alter the body stream and break signature checks.
+// ── ⚠️  WEBHOOK ROUTE MUST BE BEFORE clerkMiddleware() ────────
+// svix verifies the HMAC over the raw bytes. clerkMiddleware()
+// reads / alters the body stream and breaks signature checks if
+// it runs first. Mount the raw-body webhook route here.
 app.use("/api/clerk", require("./routes/clerk.routes"));
 
 // ── Clerk middleware (validates session tokens globally) ───────
