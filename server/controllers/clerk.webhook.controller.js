@@ -4,8 +4,13 @@ const User = require("../models/User.model");
 const handleClerkWebhook = async (req, res) => {
   const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;
   if (!WEBHOOK_SECRET) {
+    console.error("❌ CLERK_WEBHOOK_SECRET is not set in environment!");
     return res.status(500).json({ error: "CLERK_WEBHOOK_SECRET not set" });
   }
+
+  // Debug: log first 15 chars so you can verify the correct secret is loaded
+  console.log("🔑 Webhook secret prefix:", WEBHOOK_SECRET.substring(0, 15) + "...");
+  console.log("📦 Body type:", typeof req.body, "| Is Buffer:", Buffer.isBuffer(req.body), "| Length:", req.body?.length);
 
   const svix_id = req.headers["svix-id"];
   const svix_timestamp = req.headers["svix-timestamp"];
