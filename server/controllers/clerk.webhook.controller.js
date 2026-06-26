@@ -7,7 +7,7 @@ const handleClerkWebhook = async (req, res) => {
     return res.status(500).json({ error: "CLERK_WEBHOOK_SECRET not set" });
   }
 
-  const svix_id        = req.headers["svix-id"];
+  const svix_id = req.headers["svix-id"];
   const svix_timestamp = req.headers["svix-timestamp"];
   const svix_signature = req.headers["svix-signature"];
 
@@ -19,7 +19,7 @@ const handleClerkWebhook = async (req, res) => {
   try {
     const wh = new Webhook(WEBHOOK_SECRET);
     event = wh.verify(req.body, {
-      "svix-id":        svix_id,
+      "svix-id": svix_id,
       "svix-timestamp": svix_timestamp,
       "svix-signature": svix_signature,
     });
@@ -36,8 +36,8 @@ const handleClerkWebhook = async (req, res) => {
 
       case "user.created": {
         const email = getPrimaryEmail(data);
-        const name  = getFullName(data) || email.split("@")[0];
-        const plan  = data.public_metadata?.plan || "free";
+        const name = getFullName(data) || email.split("@")[0];
+        const plan = data.public_metadata?.plan || "free";
         await User.create({
           clerkId: data.id, email, name,
           avatar: data.image_url || "", plan,
@@ -47,9 +47,9 @@ const handleClerkWebhook = async (req, res) => {
       }
 
       case "user.updated": {
-        const email  = getPrimaryEmail(data);
-        const name   = getFullName(data);
-        const plan   = data.public_metadata?.plan;
+        const email = getPrimaryEmail(data);
+        const name = getFullName(data);
+        const plan = data.public_metadata?.plan;
         const update = { email, avatar: data.image_url || "" };
         if (name) update.name = name;
         if (plan) update.plan = plan;
@@ -64,8 +64,8 @@ const handleClerkWebhook = async (req, res) => {
       case "user.subscription.created":
       case "user.subscription.updated": {
         const clerkId = data.payer?.user_id
-                     || data.user_id
-                     || data.userId;
+          || data.user_id
+          || data.userId;
 
         if (!clerkId) {
           console.warn("⚠️ No clerkId in subscription event");
@@ -89,10 +89,10 @@ const handleClerkWebhook = async (req, res) => {
           const candidates = items.filter(i => i.status === status);
           for (const item of candidates) {
             const amount = item.plan?.amount ?? 0;
-            const slug   = item.plan?.slug;
+            const slug = item.plan?.slug;
             if (slug && amount >= bestPlanAmount) {
               bestPlanAmount = amount;
-              bestPlanSlug   = slug;
+              bestPlanSlug = slug;
             }
           }
           if (bestPlanSlug && bestPlanAmount > 0) break; // found paid plan
@@ -110,7 +110,7 @@ const handleClerkWebhook = async (req, res) => {
             i => !["abandoned", "canceled"].includes(i.status)
           );
           if (newest) {
-            bestPlanSlug   = newest.plan?.slug;
+            bestPlanSlug = newest.plan?.slug;
             bestPlanAmount = newest.plan?.amount ?? 0;
           }
         }
@@ -150,13 +150,13 @@ const handleClerkWebhook = async (req, res) => {
       case "user.deleted": {
         const user = await User.findOne({ clerkId: data.id });
         if (user) {
-          const Prediction    = require("../models/Prediction.model");
+          const Prediction = require("../models/Prediction.model");
           const cloudinarySvc = require("../services/cloudinary.service");
-          const predictions   = await Prediction.find({ clerkId: data.id });
+          const predictions = await Prediction.find({ clerkId: data.id });
           for (const p of predictions) {
             const rt = p.type === "video" ? "video" : "image";
-            if (p.originalPublicId)  await cloudinarySvc.deleteFile(p.originalPublicId, rt).catch(() => {});
-            if (p.annotatedPublicId) await cloudinarySvc.deleteFile(p.annotatedPublicId, rt).catch(() => {});
+            if (p.originalPublicId) await cloudinarySvc.deleteFile(p.originalPublicId, rt).catch(() => { });
+            if (p.annotatedPublicId) await cloudinarySvc.deleteFile(p.annotatedPublicId, rt).catch(() => { });
           }
           await Prediction.deleteMany({ clerkId: data.id });
           await user.deleteOne();
@@ -190,7 +190,7 @@ const mapClerkPlanToPlan = (slug) => {
   if (!slug) return "free";
   const s = slug.toLowerCase().trim();
   if (s.includes("enterprise")) return "enterprise";
-  if (s.includes("pro"))        return "pro";
+  if (s.includes("pro")) return "pro";
   return "free";
 };
 

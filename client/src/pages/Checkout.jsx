@@ -154,6 +154,15 @@ function CheckoutFlow({ planName }) {
     return <CheckoutInit />;
   }
 
+  if (status === "complete") {
+    return (
+      <div className="text-center py-8 space-y-4">
+        <CheckCircle className="h-12 w-12 text-green-400 mx-auto" />
+        <p className="text-white font-semibold">Payment complete! Redirecting…</p>
+      </div>
+    );
+  }
+
   return (
     <PaymentElementProvider checkout={checkout}>
       <PaymentSection planName={planName} />
@@ -184,27 +193,44 @@ function CheckoutInit() {
 }
 
 function PaymentSection({ planName }) {
-  const navigate                   = useNavigate();
-  const { checkout }               = useCheckout();
+  const navigate                    = useNavigate();
+  const { checkout }                = useCheckout();
   const { isConfirming, confirm, finalize, error } = checkout;
-  const { isFormReady, submit }    = usePaymentElement();
+  const { isFormReady, submit }     = usePaymentElement();
   const [processing, setProcessing] = React.useState(false);
+  const [localError, setLocalError] = React.useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!isFormReady || processing) return;
     setProcessing(true);
+    setLocalError(null);
     try {
       const { data, error: submitErr } = await submit();
-      if (submitErr) { setProcessing(false); return; }
+      if (submitErr) {
+        setLocalError(submitErr.message || "Payment form error. Please try again.");
+        setProcessing(false);
+        return;
+      }
       await confirm(data);
       await finalize({ navigate: () => navigate("/checkout?upgraded=true") });
     } catch (err) {
       console.error("Payment error:", err);
+      // 409 = Clerk already has an active/pending checkout for this plan
+      if (err?.status === 409 || err?.message?.includes("409") || err?.message?.includes("Conflict")) {
+        setLocalError(
+          "A checkout is already in progress for this plan. Please wait a moment and try again, or refresh the page."
+        );
+      } else {
+        setLocalError(err?.message || "Payment failed. Please try again.");
+      }
     } finally {
       setProcessing(false);
     }
   };
+
+  // Prefer Clerk's own checkout error, fall back to our local one
+  const displayError = error?.message || localError;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -217,9 +243,9 @@ function PaymentSection({ planName }) {
         }
       />
 
-      {error && (
+      {displayError && (
         <div className="rounded-lg bg-red-950/30 border border-red-700/50 px-4 py-3 text-sm text-red-400">
-          {error.message}
+          ⚠️ {displayError}
         </div>
       )}
 
