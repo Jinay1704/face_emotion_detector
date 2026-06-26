@@ -1,14 +1,6 @@
 const { Webhook } = require("svix");
 const User = require("../models/User.model");
 
-/**
- * Clerk Webhook Controller
- *
- * Handles user lifecycle + billing events from Clerk.
- * Supports both:
- *   - Manual plan via publicMetadata.plan
- *   - Clerk Billing subscription events
- */
 const handleClerkWebhook = async (req, res) => {
   const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;
   if (!WEBHOOK_SECRET) {
@@ -47,7 +39,6 @@ const handleClerkWebhook = async (req, res) => {
         const email = getPrimaryEmail(data);
         const name  = getFullName(data) || email.split("@")[0];
         const plan  = data.public_metadata?.plan || "free";
-
         await User.create({
           clerkId: data.id,
           email,
@@ -59,43 +50,116 @@ const handleClerkWebhook = async (req, res) => {
         break;
       }
 
-      // ── User updated (profile or metadata change) ──────────
+      // ── User updated ───────────────────────────────────────
       case "user.updated": {
-        const email  = getPrimaryEmail(data);
-        const name   = getFullName(data);
-        // Read plan from publicMetadata (set by your server or Clerk billing)
-        const plan   = data.public_metadata?.plan;
-
+        const email = getPrimaryEmail(data);
+        const name  = getFullName(data);
+        const plan  = data.public_metadata?.plan;
         const update = { email, avatar: data.image_url || "" };
         if (name) update.name = name;
         if (plan) update.plan = plan;
-
         await User.findOneAndUpdate({ clerkId: data.id }, update, { new: true });
         console.log("✅ User updated:", email, plan ? "→ plan: " + plan : "");
         break;
       }
 
-      // ── Clerk Billing: subscription created or updated ─────
+      // ── Subscription created or updated ───────────────────
+      case "subscription.created":
+      case "subscription.updated":
       case "user.subscription.created":
       case "user.subscription.updated": {
-        const clerkId  = data.user_id || data.clerkId;
-        const planSlug = data.plan?.slug || data.subscription?.plan?.slug;
+        console.log("💳 Subscription event:", type);
 
-        if (clerkId && planSlug) {
-          // Map Clerk plan slug to your plan names
-          const plan = mapClerkPlanToPlan(planSlug);
-          await User.findOneAndUpdate({ clerkId }, { plan });
-          console.log("✅ Subscription updated:", clerkId, "→", plan);
+        // ── Get the user ID from payer ─────────────────────
+        const clerkId = data.payer?.user_id
+                     || data.user_id
+                     || data.userId;
+
+        if (!clerkId) {
+          console.warn("⚠️ No clerkId found in subscription event");
+          break;
+        }
+
+        // ── Find active plan from items array ──────────────
+        // Items array contains all subscription items
+        // Status priority: active > upcoming > (ignore abandoned/canceled/ended)
+        const items = data.items || [];
+
+        console.log("All items:", items.map(i => ({
+          plan: i.plan?.slug,
+          status: i.status,
+          amount: i.plan?.amount
+        })));
+
+        // Find the best active plan
+        // Priority: active paid > upcoming paid > active free > upcoming free
+        let activePlanSlug = null;
+
+        // First try: find active paid plan
+        const activePaid = items.find(
+          i => i.status === "active" && i.plan?.amount > 0
+        );
+        if (activePaid) {
+          activePlanSlug = activePaid.plan.slug;
+          console.log("Found active paid plan:", activePlanSlug);
+        }
+
+        // Second try: find upcoming paid plan (switching to)
+        if (!activePlanSlug) {
+          const upcomingPaid = items.find(
+            i => i.status === "upcoming" && i.plan?.amount > 0
+          );
+          if (upcomingPaid) {
+            activePlanSlug = upcomingPaid.plan.slug;
+            console.log("Found upcoming paid plan:", activePlanSlug);
+          }
+        }
+
+        // Third try: find active free plan (downgraded)
+        if (!activePlanSlug) {
+          const activeFree = items.find(
+            i => (i.status === "active" || i.status === "upcoming") && i.plan?.amount === 0
+          );
+          if (activeFree) {
+            activePlanSlug = activeFree.plan.slug || "free";
+            console.log("Found active/upcoming free plan:", activePlanSlug);
+          }
+        }
+
+        // Default to free if nothing found
+        if (!activePlanSlug) {
+          activePlanSlug = "free";
+          console.log("No active plan found, defaulting to free");
+        }
+
+        const plan = mapClerkPlanToPlan(activePlanSlug);
+        console.log("Mapped plan slug:", activePlanSlug, "→", plan);
+
+        const user = await User.findOneAndUpdate(
+          { clerkId },
+          { plan },
+          { new: true }
+        );
+
+        if (user) {
+          console.log("✅ Plan updated:", user.email, "→", plan);
+        } else {
+          console.warn("⚠️ User not found in MongoDB for clerkId:", clerkId);
         }
         break;
       }
 
-      // ── Clerk Billing: subscription deleted/canceled ───────
+      // ── Subscription deleted ───────────────────────────────
+      case "subscription.deleted":
       case "user.subscription.deleted": {
-        const clerkId = data.user_id || data.clerkId;
+        const clerkId = data.payer?.user_id || data.user_id || data.userId;
         if (clerkId) {
-          await User.findOneAndUpdate({ clerkId }, { plan: "free" });
-          console.log("✅ Subscription canceled:", clerkId, "→ free");
+          const user = await User.findOneAndUpdate(
+            { clerkId },
+            { plan: "free" },
+            { new: true }
+          );
+          console.log("✅ Subscription deleted → free | User:", user?.email);
         }
         break;
       }
@@ -106,8 +170,7 @@ const handleClerkWebhook = async (req, res) => {
         if (user) {
           const Prediction    = require("../models/Prediction.model");
           const cloudinarySvc = require("../services/cloudinary.service");
-
-          const predictions = await Prediction.find({ clerkId: data.id });
+          const predictions   = await Prediction.find({ clerkId: data.id });
           for (const p of predictions) {
             const rt = p.type === "video" ? "video" : "image";
             if (p.originalPublicId)  await cloudinarySvc.deleteFile(p.originalPublicId, rt).catch(() => {});
@@ -121,17 +184,16 @@ const handleClerkWebhook = async (req, res) => {
       }
 
       default:
-        console.log("Unhandled Clerk event:", type);
+        console.log("ℹ️ Unhandled Clerk event:", type);
     }
   } catch (err) {
-    console.error("Webhook error:", err.message);
+    console.error("❌ Webhook error:", err);
     return res.status(500).json({ error: "Webhook processing failed" });
   }
 
   return res.json({ received: true, type });
 };
 
-// ── Helpers ────────────────────────────────────────────────────
 const getPrimaryEmail = (data) => {
   const primary = data.email_addresses?.find(
     (e) => e.id === data.primary_email_address_id
@@ -142,17 +204,12 @@ const getPrimaryEmail = (data) => {
 const getFullName = (data) =>
   [data.first_name, data.last_name].filter(Boolean).join(" ");
 
-// Map Clerk plan slug → your plan name
-// Update these slugs to match exactly what you named plans in Clerk Dashboard
 const mapClerkPlanToPlan = (slug) => {
-  const map = {
-    "pro":        "pro",
-    "pro-plan":   "pro",
-    "enterprise": "enterprise",
-    "enterprise-plan": "enterprise",
-    "free":       "free",
-  };
-  return map[slug?.toLowerCase()] || "free";
+  if (!slug) return "free";
+  const s = slug.toLowerCase().trim();
+  if (s.includes("enterprise")) return "enterprise";
+  if (s.includes("pro"))        return "pro";
+  return "free";
 };
 
 module.exports = { handleClerkWebhook };
