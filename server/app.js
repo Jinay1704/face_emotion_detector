@@ -35,11 +35,13 @@ app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 200, standardHeaders: true })
 // ── Logging ────────────────────────────────────────────────────
 if (process.env.NODE_ENV === "development") app.use(morgan("dev"));
 
+// ── Raw body routes MUST come BEFORE clerkMiddleware ──────────
+// svix verifies the HMAC over the raw bytes; clerkMiddleware()
+// can consume/alter the body stream and break signature checks.
+app.use("/api/clerk", require("./routes/clerk.routes"));
+
 // ── Clerk middleware (validates session tokens globally) ───────
 app.use(clerkMiddleware());
-
-// ── Raw body routes (ONLY Clerk webhooks etc.) ─────────────────
-app.use("/api/clerk", require("./routes/clerk.routes"));
 
 // ── JSON body parser ───────────────────────────────────────────
 app.use(express.json({ limit: "10mb" }));
