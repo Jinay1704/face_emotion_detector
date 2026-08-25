@@ -106,32 +106,52 @@ def predict_image(image_input, use_face_detection=True):
     faces     = []
 
     if use_face_detection:
-        detections = detect_faces(frame)
+        # ── Resize large images before detection for speed ────────────────────
+        h_orig, w_orig = frame.shape[:2]
+        DETECT_MAX_W = 640
+        if w_orig > DETECT_MAX_W:
+            scale = DETECT_MAX_W / float(w_orig)
+            det_frame = cv2.resize(frame, (int(w_orig * scale), int(h_orig * scale)),
+                                   interpolation=cv2.INTER_LINEAR)
+        else:
+            scale = 1.0
+            det_frame = frame
+
+        detections = detect_faces(det_frame)
 
         if not detections:
             preds = predict(frame)
-            h, w  = frame.shape[:2]
-            faces.append(_face_result(0, (0, 0, w, h), preds))
-            annotated = _draw(annotated, (0, 0, w, h), preds[0][0], preds[0][1])
+            faces.append(_face_result(0, (0, 0, w_orig, h_orig), preds))
+            annotated = _draw(annotated, (0, 0, w_orig, h_orig), preds[0][0], preds[0][1])
         else:
-            # Batch: preprocess all crops then one model call
+            # Scale bboxes back to original resolution, then batch predict
             crops = []
+            orig_bboxes = []
             for det in detections:
-                x1, y1, x2, y2 = det["bbox"]
-                crops.append(frame[y1:y2, x1:x2])
+                sx1, sy1, sx2, sy2 = det["bbox"]
+                if scale < 1.0:
+                    ox1 = int(sx1 / scale); oy1 = int(sy1 / scale)
+                    ox2 = int(sx2 / scale); oy2 = int(sy2 / scale)
+                    ox1 = max(0, min(w_orig, ox1)); oy1 = max(0, min(h_orig, oy1))
+                    ox2 = max(0, min(w_orig, ox2)); oy2 = max(0, min(h_orig, oy2))
+                else:
+                    ox1, oy1, ox2, oy2 = sx1, sy1, sx2, sy2
+                orig_bboxes.append((ox1, oy1, ox2, oy2))
+                crop = frame[oy1:oy2, ox1:ox2]
+                crops.append(crop if crop.size > 0 else frame)
 
             batch_preds = predict_batch(crops)
 
-            for fid, (det, preds) in enumerate(zip(detections, batch_preds)):
-                faces.append(_face_result(fid, det["bbox"], preds))
-                annotated = _draw(annotated, det["bbox"], preds[0][0], preds[0][1], fid)
+            for fid, (bbox, preds) in enumerate(zip(orig_bboxes, batch_preds)):
+                faces.append(_face_result(fid, bbox, preds))
+                annotated = _draw(annotated, bbox, preds[0][0], preds[0][1], fid)
     else:
         preds = predict(frame)
         h, w  = frame.shape[:2]
         faces.append(_face_result(0, (0, 0, w, h), preds))
         annotated = _draw(annotated, (0, 0, w, h), preds[0][0], preds[0][1])
 
-    _, buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 88])
+    _, buf = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 85])
 
     return {
         "num_faces":             len(faces),

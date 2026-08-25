@@ -15,7 +15,7 @@ export default function ResultCard({ result }) {
     frames_processed,
   } = result;
 
-  console.log("RESULT:", result);
+  // console.log("RESULT:", result);
 
   const dominant = summary?.dominant_emotion;
 
